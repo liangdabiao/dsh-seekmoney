@@ -38,6 +38,13 @@ npm install && npm test && npm run selftest && npm run build
 - `npm run selftest`：评分端到端（蓝海 High/红海 Low）+ 数据分级 + 技能 + 泄露 key 扫描 + 面板 API
 - `npm run build`：打包 dist/client.js + 三大自检（含 treeShaking:false）
 
+
+## 安装
+
+```bash
+dsh plugin --profile web add dsh-seekmoney
+```
+
 ## 许可
 
 MIT（liangdabiao）
