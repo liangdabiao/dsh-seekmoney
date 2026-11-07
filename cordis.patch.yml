@@ -1,0 +1,5 @@
+# 用户痛点发现：技能 + 优先级评分工具。
+# 浏览器半边由 dsh.client 声明加载。
+- insert:
+    - id: seekmoney
+      name: 'dsh-seekmoney'
