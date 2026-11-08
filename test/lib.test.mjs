@@ -155,3 +155,35 @@ test('seekmoney_score 工具：正常入参给出确定结论', async () => {
   assert.equal(data.level, 'Medium')
   assert.equal(data.data_quality.level, 'reliable')
 })
+
+// ---------------------------------------------------------------------------
+// 数据通道：技能/系统提示必须指向真实可用的取数工具，而不是"自己写 Python 调 TikHub"
+// ---------------------------------------------------------------------------
+test('技能 addendum：小红书走 xhs_search，其它平台走 web_search，且不向用户索要 key', async () => {
+  const provider = createSkillProvider([join(ROOT, 'skills')])
+  const c = (await provider.list())[0]
+  const skill = await provider.get(c)
+  assert.match(skill.content, /xhs_search/)
+  assert.match(skill.content, /xhs_comments/)
+  assert.match(skill.content, /web_search/)
+  assert.match(skill.content, /本插件自身不需要任何 API key/)
+  assert.ok(!/需要用户自己的 key/.test(skill.content), '不该再让用户自己给 key')
+  assert.ok(!/沙箱 Python（TikHub/.test(skill.content), '不该再让模型现写 Python 连 TikHub')
+})
+
+test('技能正文：阶段 1 取数规则含 xhs_search + 禁止索要 key', () => {
+  const text = readFileSync(join(ROOT, 'skills', 'seekmoney-pain-finder', 'SKILL.md'), 'utf8')
+  assert.match(text, /xhs_search/)
+  assert.match(text, /web_search/)
+  assert.match(text, /不需要、也不应该向用户索要任何 API key/)
+  assert.match(text, /编造/)
+})
+
+test('systemPrompt：数据通道写清楚，且明确不需要 key', () => {
+  const section = systemSection()
+  assert.match(section.text, /数据通道（本插件不需要 API key）/)
+  assert.match(section.text, /xhs_search/)
+  assert.match(section.text, /web_search/)
+  assert.ok(!/需要用户自己的 key/.test(section.text))
+})
+

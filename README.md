@@ -34,7 +34,7 @@ DeepSeek Harness（dsh）插件：**从社交媒体找商机，发现用户核�
 npm install && npm test && npm run selftest && npm run build
 ```
 
-- `npm test`：14 个单测（需求强度/市场规模阶梯/竞争度连续函数/无效方案过滤/40-30-30 加权/蓝海红海端到端/数据分级/工具 schema/技能铁律/systemPrompt/许可 + 3 个回归：非数字入参不再算成 NaN 并假装 Low、工具层坏入参给可读错误、正常入参给出确定结论）
+- `npm test`：18 个单测（需求强度/市场规模阶梯/竞争度连续函数/无效方案过滤/40-30-30 加权/蓝海红海端到端/数据分级/工具 schema/技能铁律/systemPrompt/许可 + 3 个评分回归：非数字入参不再算成 NaN 并假装 Low、工具层坏入参给可读错误、正常入参给出确定结论 + 3 个数据通道守卫：技能 addendum 指向 `xhs_search`/`web_search`、技能正文禁止索要 key、系统提示写明"本插件不需要 API key"）
 - `npm run selftest`：评分端到端（蓝海 High/红海 Low）+ 数据分级 + 技能 + 泄露 key 扫描 + 面板 API
 - `npm run build`：打包 dist/client.js + 三大自检（含 treeShaking:false）
 
@@ -66,3 +66,13 @@ dsh plugin --profile web add github:liangdabiao/dsh-seekmoney#v0.1.1
 ## 许可
 
 MIT（liangdabiao）
+
+## 数据从哪来（不需要 key）
+
+| 平台 | 通道 |
+|---|---|
+| 小红书 | xhs_search + xhs_comments（TikHub，token 由「小红书验证」插件持有，在它的面板「⚙️ 设置」配置） |
+| 抖音 / TikTok / B站 / YouTube / X / Reddit | web_search + web_fetch |
+| 都拿不到 | 请用户粘贴内容，报告里把缺口标 N/A |
+
+本插件自身**不存任何 API key**，也不会让模型在对话里索要 key。装了 dsh-tikhub-api（TikHub 多平台工作台）时也可以优先用它的端点工具。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-seekmoney",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "用户痛点发现与商机验证：多平台采集方法论 + 语义聚类 + 优先级评分系统（需求40%+市场30%+竞争30%）。纯确定性评分零 API key。",
   "license": "MIT",
   "type": "module",

@@ -41,6 +41,20 @@ function GuideTab() {
           '点「马上使用」→ 开新对话，输入框已填好指令；补上要调研的方向（如：健身 App 用户的痛点）后回车即可。')),
       h('button', { style: styles.ctaButton, onClick: use, title: `填进对话：${USE_PROMPT}` }, '🚀 马上使用')),
     h('div', { style: styles.card },
+      h('div', { style: styles.sectionTitle }, '数据从哪来（本插件不需要 key）'),
+      h('div', { style: styles.dataList },
+        h('div', { style: styles.dataRow },
+          h('span', { style: styles.dataTag }, '小红书'),
+          h('span', null, 'xhs_search / xhs_comments —— 真实笔记与评论（TikHub）')),
+        h('div', { style: styles.dataRow },
+          h('span', { style: styles.dataTag }, '其它平台'),
+          h('span', null, 'web_search / web_fetch（抖音 · TikTok · B站 · YouTube · X · Reddit）')),
+        h('div', { style: styles.dataRow },
+          h('span', { style: styles.dataTag }, '都拿不到'),
+          h('span', null, '请用户粘贴内容，或报告里把缺口标 N/A')),
+        h('div', { style: { ...styles.muted, marginTop: 8, lineHeight: 1.8 } },
+          'TikHub token 属于「小红书验证」插件：在它的面板「⚙️ 设置」里粘贴即可，本插件不存 key、也不会让你在对话里暴露 key。'))),
+    h('div', { style: styles.card },
       h('div', { style: styles.sectionTitle }, '怎么找痛点'),
       h('div', { style: styles.stepList },
         '在对话里一句话即可：',
@@ -85,6 +99,9 @@ const styles = {
   button: { padding: '6px 14px', border: 'none', borderRadius: 8, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 13 },
   tabActive: { padding: '8px 16px', border: '1px solid #0e7490', borderRadius: 8, background: '#e0f2f5', color: '#075263', fontWeight: 600, fontSize: 13 },
   card: { background: '#fff', border: '1px solid #e3e3e6', borderRadius: 10, padding: 12, marginBottom: 10 },
+  dataList: { display: 'grid', gap: 6 },
+  dataRow: { display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, lineHeight: 1.7 },
+  dataTag: { flexShrink: 0, background: '#e0f2f5', color: '#075263', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 600 },
   sectionTitle: { fontWeight: 700, marginBottom: 6, color: '#075263' },
   stepList: { lineHeight: 1.9 },
   quote: { background: '#e0f2f5', borderRadius: 6, padding: '4px 10px', margin: '4px 0', color: '#075263' },
@@ -114,5 +131,6 @@ function apply(ctx) {
 exports.isPlugin = true
 exports.inject = ['slots', 'uiWorkspace']
 exports.apply = apply
+
 
 
