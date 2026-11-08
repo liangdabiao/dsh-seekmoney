@@ -1,7 +1,7 @@
 {
   "name": "dsh-seekmoney",
-  "version": "0.1.2",
-  "description": "用户痛点发现与商机验证：多平台采集方法论 + 语义聚类 + 优先级评分系统（需求40%+市场30%+竞争30%）。纯确定性评分零 API key。",
+  "version": "0.2.0",
+  "description": "用户痛点发现与商机验证：自带 TikHub key（小红书/抖音/TikTok/B站/YouTube/视频号 搜索+评论）+ 语义聚类 + 优先级评分（需求40%+市场30%+竞争30%）。",
   "license": "MIT",
   "type": "module",
   "main": "src/host.js",

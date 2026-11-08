@@ -1,14 +1,16 @@
 // ============================================================================
-// 用户痛点发现 · 浏览器半边（最小面板）。
-// 两块：📖 5 阶段流程 + 评分系统说明。
+// 用户痛点发现 · 浏览器半边。
+// 两个标签：📖 找痛点流程（含「马上使用」+ 数据源说明）/ ⚙️ 设置（本插件自己的 TikHub token）。
+// 本插件自带 key、自己调 TikHub：seekmoney_search / seekmoney_comments。
 // ============================================================================
 const h = require('react').createElement
-const { useState } = require('react')
+const { useState, useEffect } = require('react')
 
 const PANEL_ID = 'seekmoney'
+const BASE = 'seekmoney'
 
 // 「马上使用」：开新对话并把调研指令填进输入框（不直接发送，用户补上主题再回车）。
-// 走 Host 的 uiWorkspace.startSession（与「运营 Agent」「卖家工具箱」「小红书验证」「评论 VOC」「电商视觉」同一套入口）：
+// 走 Host 的 uiWorkspace.startSession（与「运营 Agent」「卖家工具箱」等同一套入口）：
 //   startSession(sessionId?, { prompt, whenDraftExists: 'keep'|'replace'|'append' })
 const USE_PROMPT = '使用‘痛点发现’插件 进行商机调研：'
 let openInChat = null
@@ -21,15 +23,20 @@ function PanelIcon(props) {
     h('path', { d: 'M9 9.5c.5-1 3.5-1 4 0', stroke: '#ffd24a', 'stroke-width': 1.2, 'stroke-linecap': 'round' }))
 }
 
+async function fetchJson(path, init) {
+  const res = await fetch(BASE + path, init)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`)
+  return data
+}
+
 const STAGES = [
-  ['🌐 多平台采集', '抖音 · 小红书 · TikTok · B站 · YouTube · X · Reddit——从用户真实讨论中找痛点'],
+  ['🌐 多平台采集', 'seekmoney_search 按关键词搜小红书/抖音/TikTok/B站/YouTube/X/Reddit（TikHub 真实数据）'],
   ['🔬 语义聚类', 'Embedding + DBSCAN 自动发现主题簇；视频/评论分开聚类；<100 条可让模型直觉分组'],
   ['🔍 深度分析', '表面痛点 → 根本原因 → 用户场景 → 情感强度 0-5；现有方案 → 未满足需求 → 机会'],
   ['⚖️ 优先级评分', '需求 40% + 市场 30% + 竞争 30%（确定性公式，用 seekmoney_score 工具算）'],
   ['🚀 MVP 计划', '核心功能 → 验证假设 → 首批用户 → 成本估算 → 报告输出到工作区 reports/'],
 ]
-
-const PLATFORMS = ['抖音', '小红书', 'TikTok', 'B站', 'YouTube', 'X (Twitter)', 'Reddit', '微信视频号']
 
 function GuideTab() {
   const use = () => { if (openInChat) openInChat(USE_PROMPT) }
@@ -41,19 +48,23 @@ function GuideTab() {
           '点「马上使用」→ 开新对话，输入框已填好指令；补上要调研的方向（如：健身 App 用户的痛点）后回车即可。')),
       h('button', { style: styles.ctaButton, onClick: use, title: `填进对话：${USE_PROMPT}` }, '🚀 马上使用')),
     h('div', { style: styles.card },
-      h('div', { style: styles.sectionTitle }, '数据从哪来（本插件不需要 key）'),
+      h('div', { style: styles.sectionTitle }, '数据从哪来（本插件自带 TikHub key）'),
       h('div', { style: styles.dataList },
         h('div', { style: styles.dataRow },
-          h('span', { style: styles.dataTag }, '小红书'),
-          h('span', null, 'xhs_search / xhs_comments —— 真实笔记与评论（TikHub）')),
+          h('span', { style: styles.dataTag }, '搜索'),
+          h('span', null, 'seekmoney_search —— 小红书 · 抖音 · TikTok · B站 · YouTube · 微信视频号')),
         h('div', { style: styles.dataRow },
-          h('span', { style: styles.dataTag }, '其它平台'),
-          h('span', null, 'web_search / web_fetch（抖音 · TikTok · B站 · YouTube · X · Reddit）')),
+          h('span', { style: styles.dataTag }, '评论'),
+          h('span', null, 'seekmoney_comments —— 同上 6 个渠道（评论是痛点金矿）')),
         h('div', { style: styles.dataRow },
-          h('span', { style: styles.dataTag }, '都拿不到'),
-          h('span', null, '请用户粘贴内容，或报告里把缺口标 N/A')),
+          h('span', { style: styles.dataTag }, '未启用'),
+          h('span', null, 'X (Twitter) · Reddit —— 参考实现里同样未启用')),
+        h('div', { style: styles.dataRow },
+          h('span', { style: styles.dataTag }, '兜底'),
+          h('span', null, 'web_search / web_fetch，或请用户粘贴内容（缺口标 N/A）')),
         h('div', { style: { ...styles.muted, marginTop: 8, lineHeight: 1.8 } },
-          'TikHub token 属于「小红书验证」插件：在它的面板「⚙️ 设置」里粘贴即可，本插件不存 key、也不会让你在对话里暴露 key。'))),
+          'key 是本插件自己的：在「⚙️ 设置」里粘贴 TikHub token（存本机 $DSH_HOME/seekmoney/settings.json，不回显）。' +
+            '没配 key 时工具会直接提示你去设置，不会向你要明文 token。'))),
     h('div', { style: styles.card },
       h('div', { style: styles.sectionTitle }, '怎么找痛点'),
       h('div', { style: styles.stepList },
@@ -80,12 +91,76 @@ function GuideTab() {
       h('div', { style: styles.muted }, '本框架输出分析，不构成商业决策依据。数据来自社交媒体公开内容，请遵守平台规则。')))
 }
 
+// ---------- 设置：本插件自己的 TikHub token（存本机，永不上传/回显明文） ----------
+function SettingsTab() {
+  const [info, setInfo] = useState(null)
+  const [token, setToken] = useState('')
+  const [msg, setMsg] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    fetchJson('/api/config').then(setInfo).catch((e) => setError(e.message))
+  }, [])
+
+  const save = async () => {
+    setError(''); setMsg('')
+    if (!token.trim()) { setError('先粘贴 TikHub token。'); return }
+    setBusy(true)
+    try {
+      const d = await fetchJson('/api/config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ tikhubToken: token.trim() }),
+      })
+      setInfo(d.credentials); setToken('')
+      setMsg('已保存（存本机，不会上传）。现在可以让模型用 seekmoney_search 采集真实数据了。')
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  const clear = async () => {
+    setError(''); setMsg('')
+    try {
+      const d = await fetchJson('/api/config', { method: 'DELETE' })
+      setInfo(d.credentials); setMsg('已清除本机保存的 token。')
+    } catch (e) { setError(e.message) }
+  }
+
+  return h('div', null,
+    h('div', { style: styles.card },
+      h('div', { style: styles.sectionTitle }, '⚙️ TikHub token（本插件自己的 key）'),
+      h('div', { style: styles.muted },
+        info === null ? '加载中…' : info.configured ? `已配置 ✓（${info.tokenMasked}）` : '未配置。粘贴并保存后，seekmoney_search / seekmoney_comments 才能取真实数据。'),
+      h('input', {
+        type: 'password',
+        placeholder: 'TikHub token',
+        value: token,
+        onChange: (e) => setToken(e.target.value),
+        style: styles.input,
+      }),
+      h('div', { style: styles.row },
+        h('button', { style: styles.button, onClick: save, disabled: busy }, busy ? '保存中…' : '保存'),
+        info?.configured ? h('button', { style: styles.tab, onClick: clear }, '清除已存') : null),
+      msg ? h('div', { style: styles.ok }, msg) : null,
+      error ? h('div', { style: styles.error }, error) : null,
+      h('div', { style: { ...styles.muted, fontSize: 12, lineHeight: 1.8, marginTop: 8 } },
+        '获取：www.tikhub.io 注册 → 用户中心 API Token。',
+        h('br'), '存在本机：$DSH_HOME/seekmoney/settings.json（任何接口都不回显明文）。',
+        h('br'), '本插件用它自己调 TikHub，不依赖「小红书验证」等其它插件。')))
+}
+
+const TABS = [['guide', '📖 找痛点流程'], ['settings', '⚙️ 设置']]
+
 function Panel() {
   const [tab, setTab] = useState('guide')
   return h('div', { style: styles.wrap },
     h('div', { style: styles.row },
-      h('button', { style: styles.tabActive }, '📖 找痛点流程')),
-    h(GuideTab))
+      TABS.map(([id, label]) => h('button', {
+        key: id,
+        style: tab === id ? styles.tabActive : styles.tab,
+        onClick: () => setTab(id),
+      }, label))),
+    tab === 'guide' ? h(GuideTab) : h(SettingsTab))
 }
 
 const styles = {
@@ -97,7 +172,9 @@ const styles = {
   ctaMuted: { color: '#7d8b8f', lineHeight: 1.7 },
   ctaButton: { padding: '10px 20px', border: 'none', borderRadius: 10, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700, boxShadow: '0 2px 6px rgba(14,116,144,.25)' },
   button: { padding: '6px 14px', border: 'none', borderRadius: 8, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 13 },
+  tab: { padding: '8px 16px', border: '1px solid #d9d9de', borderRadius: 8, background: '#fff', color: '#1a1a1a', cursor: 'pointer', fontSize: 13 },
   tabActive: { padding: '8px 16px', border: '1px solid #0e7490', borderRadius: 8, background: '#e0f2f5', color: '#075263', fontWeight: 600, fontSize: 13 },
+  input: { width: '100%', padding: '8px 10px', border: '1px solid #d9d9de', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', marginTop: 8 },
   card: { background: '#fff', border: '1px solid #e3e3e6', borderRadius: 10, padding: 12, marginBottom: 10 },
   dataList: { display: 'grid', gap: 6 },
   dataRow: { display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, lineHeight: 1.7 },
@@ -110,6 +187,8 @@ const styles = {
   stageNum: { width: 22, height: 22, borderRadius: '50%', background: '#0e7490', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 },
   viewTitle: { fontWeight: 600 },
   muted: { color: '#8a8a92' },
+  ok: { color: '#1a7f37', marginTop: 6 },
+  error: { color: '#c0392b', marginTop: 6 },
 }
 
 function apply(ctx) {
@@ -131,6 +210,4 @@ function apply(ctx) {
 exports.isPlugin = true
 exports.inject = ['slots', 'uiWorkspace']
 exports.apply = apply
-
-
 

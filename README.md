@@ -66,13 +66,23 @@ dsh plugin --profile web add github:liangdabiao/dsh-seekmoney#v0.1.1
 ## 许可
 
 MIT（liangdabiao）
+## 数据从哪来（全部走 TikHub，本插件自带 key）
 
-## 数据从哪来（不需要 key）
+对齐参考实现 [SeekMoney-ai](https://github.com/liangdabiao) 的 	ikhub-client，6 个渠道都由 TikHub 提供数据：
 
-| 平台 | 通道 |
-|---|---|
-| 小红书 | xhs_search + xhs_comments（TikHub，token 由「小红书验证」插件持有，在它的面板「⚙️ 设置」配置） |
-| 抖音 / TikTok / B站 / YouTube / X / Reddit | web_search + web_fetch |
-| 都拿不到 | 请用户粘贴内容，报告里把缺口标 N/A |
+| 渠道 | platform | 搜索端点 | 评论端点 |
+|---|---|---|---|
+| 小红书 | xiaohongshu | GET xiaohongshu/app_v2/search_notes | GET xiaohongshu/app_v2/get_note_comments |
+| 抖音 | douyin | POST douyin/search/fetch_general_search_v1 | GET douyin/web/fetch_video_comments |
+| TikTok | 	iktok | GET 	iktok/web/fetch_general_search | GET 	iktok/web/fetch_post_comment |
+| B站 | ilibili | GET ilibili/web/fetch_general_search | GET ilibili/app/fetch_video_comments |
+| YouTube | youtube | GET youtube/web/search_video | GET youtube/web/get_video_comments |
+| 微信视频号 | wechat | POST wechat_search/v2/fetch_search_videos | GET wechat_channels/v2/fetch_video_comments |
 
-本插件自身**不存任何 API key**，也不会让模型在对话里索要 key。装了 dsh-tikhub-api（TikHub 多平台工作台）时也可以优先用它的端点工具。
+X (Twitter) / Reddit 的端点参考实现里同样未启用，本插件也不启用。
+
+**key 在哪配**：本插件面板「⚙️ 设置」→ 粘贴 TikHub token（api.tikhub.io 注册）。
+存在本机  + "\$DSH_HOME/seekmoney/settings.json\" + @，任何接口都只回掩码、不回明文；也可以走插件 Config 的  + "	ikhubToken" + @ 或环境变量  + "TIKHUB_TOKEN" + @。
+没配 key 时工具会直接提示去「⚙️ 设置」，**不会向用户索要明文 token**。
+
+工具： + "seekmoney_search(platform, keyword)" + @ 搜内容 →  + "seekmoney_comments(platform, item_id)" + @ 拉评论 →  + "seekmoney_score" + @ 打分。TikHub 全失败时才退  + "web_search" + @/ + "web_fetch" + @，仍拿不到就请用户粘贴并把缺口标 N/A。

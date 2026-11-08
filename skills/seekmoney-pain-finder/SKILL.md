@@ -9,27 +9,30 @@ description: 用户痛点发现与商机验证方法论。当用户要求「找�
 
 ## 分析流程（5 阶段）
 
-### 阶段 1：多平台数据采集
+### 阶段 1：多平台数据采集（全部走 TikHub，本插件自带 key）
 
-目标平台与特点：
-| 平台 | 数据特点 | 适合找什么 | dsh 里的取数通道 |
+各渠道的数据**全部来自 TikHub**（对齐参考实现 SeekMoney-ai 的 `tikhub-client`）：
+
+| 平台 | platform 参数 | 搜索（seekmoney_search） | 评论（seekmoney_comments） |
 |---|---|---|---|
-| 小红书 | 图文笔记，女性用户多 | 消费决策/生活方式痛点 | `xhs_search` + `xhs_comments`（TikHub，已配 token） |
-| 抖音 | 短视频+评论，量大 | 大众消费痛点 | `web_search` / `web_fetch`（抓不到就请用户粘贴） |
-| TikTok | 国际版 | 海外市场痛点 | `web_search` / `web_fetch` |
-| B站 | 长视频+弹幕，年轻用户 | 深度需求/技术类痛点 | `web_search` / `web_fetch` |
-| YouTube | 全球 | 国际化产品机会 | `web_search` / `web_fetch` |
-| X (Twitter) | 实时讨论 | 科技/SaaS 痛点 | `web_search` / `web_fetch` |
-| Reddit | 社区深度讨论 | 垂直领域真实需求 | `web_search` / `web_fetch` |
+| 抖音 | `douyin` | POST `douyin/search/fetch_general_search_v1` | GET `douyin/web/fetch_video_comments` |
+| TikTok | `tiktok` | GET `tiktok/web/fetch_general_search` | GET `tiktok/web/fetch_post_comment` |
+| B站 | `bilibili` | GET `bilibili/web/fetch_general_search` | GET `bilibili/app/fetch_video_comments` |
+| YouTube | `youtube` | GET `youtube/web/search_video` | GET `youtube/web/get_video_comments` |
+| 小红书 | `xiaohongshu` | GET `xiaohongshu/app_v2/search_notes` | GET `xiaohongshu/app_v2/get_note_comments` |
+| 微信视频号 | `wechat` | POST `wechat_search/v2/fetch_search_videos` | GET `wechat_channels/v2/fetch_video_comments` |
+| X (Twitter) | `twitter` | 端点存在但参考实现未启用 | — |
+| Reddit | `reddit` | 端点存在但参考实现未启用 | — |
 
-**取数规则（按顺序判断，不要发明第五种）**
+**实测状态（本机验证过）**：小红书 / 抖音 / B站 / YouTube / 微信视频号 都能拿到数据与评论；TikTok 的 `tiktok/web/fetch_general_search` 目前返回 400（端点要 search_id），遇到直接换抖音或小红书。
 
-1. **小红书** → 直接调 `xhs_search`（关键词搜笔记）+ `xhs_comments`（拉评论）。这是本环境唯一的真实社交数据接口：TikHub token 由「小红书验证」插件持有（用户已在面板里配好），**你不需要、也不应该向用户索要任何 API key**。
-2. **其它平台** → 用 `web_search` 搜「<关键词> 痛点 / 抱怨 / 推荐 / 踩雷」，需要正文再用 `web_fetch`。
-3. **两条都拿不到** → 请用户粘贴内容（笔记正文、评论、帖子），或直接进入分析并**把缺口标 N/A**。
-4. 若装了 `dsh-tikhub-api` 插件（TikHub 多平台工作台），可优先用它查端点直连；没装就走上面 1-3。
+**取数规则**
 
-**绝对不要**：在对话里索要 API key（key 只走插件配置面板）、用 Python 现写脚本去连 TikHub、编造笔记/评论内容或互动量。
+1. 先用 `seekmoney_search(platform, keyword)` 搜内容——抖音/小红书先跑，需要海外视角再加 TikTok/YouTube。
+2. 拿到 `id` 后，用 `seekmoney_comments(platform, item_id)` 拉评论。评论是痛点的金矿，**不要只读标题**。
+3. **token 是本插件自己的**：没配时工具会直接告诉你「到面板「⚙️ 设置」粘贴」。**绝不向用户索要明文 key**，也不要现写 Python 脚本去连 TikHub。
+4. TikHub 全失败（网络/额度）时才退 `web_search`/`web_fetch`；仍拿不到就请用户粘贴内容，或在报告里把缺口标 **N/A**。
+5. 禁止编造笔记/评论/互动量——工具返回什么就用什么，返回 0 条就说明 0 条。
 
 ### 阶段 2：语义聚类
 
@@ -87,3 +90,4 @@ description: 用户痛点发现与商机验证方法论。当用户要求「找�
 3. **数据缺口写 N/A**——不编造笔记/评论数据。
 4. **现有方案要过滤无效项**——"待调研"/"解析失败"不算竞品。
 5. **不构成商业决策依据**——报告附免责声明。
+

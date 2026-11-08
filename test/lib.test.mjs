@@ -1,7 +1,8 @@
 // 优先级评分公式 + 技能 + API 单测。零 dsh 依赖零网络。
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -11,6 +12,8 @@ const {
   calculatePriority, scoreCluster, dataQuality,
 } = await import('../lib/priority.js')
 const { createSkillProvider } = await import('../lib/skills.js')
+const { PLATFORMS, PLATFORM_KEYS, ENABLED_KEYS, platformOf } = await import('../lib/platforms.js')
+const { searchPlatform, fetchComments } = await import('../lib/tikhub.js')
 const { requestRejection } = await import('../lib/api.js')
 const { systemSection } = await import('../src/systemPrompt.js')
 const { TOOLS } = await import('../src/host.js')
@@ -66,12 +69,17 @@ test('dataQuality 分级', () => {
   assert.equal(dataQuality(250).level, 'reliable')
 })
 
-test('2 个工具 schema 合规', () => {
-  assert.equal(TOOLS.length, 2)
+test('4 个工具 schema 合规', () => {
+  assert.equal(TOOLS.length, 4)
+  assert.deepEqual(
+    TOOLS.map((t) => t.name).sort(),
+    ['seekmoney_comments', 'seekmoney_quality', 'seekmoney_score', 'seekmoney_search'],
+  )
   for (const t of TOOLS) {
     assert.match(t.name, /^seekmoney_/)
     assert.equal(t.parameters.additionalProperties, false)
     assert.equal(typeof t.execute, 'function')
+    assert.equal(typeof t.description, 'string')
   }
 })
 
@@ -157,33 +165,280 @@ test('seekmoney_score 工具：正常入参给出确定结论', async () => {
 })
 
 // ---------------------------------------------------------------------------
-// 数据通道：技能/系统提示必须指向真实可用的取数工具，而不是"自己写 Python 调 TikHub"
+// 数据通道：全部走 TikHub（本插件自带 key），端点/方法对齐参考实现 SeekMoney-ai
 // ---------------------------------------------------------------------------
-test('技能 addendum：小红书走 xhs_search，其它平台走 web_search，且不向用户索要 key', async () => {
+test('渠道表：6 个启用渠道，端点/方法与参考实现一致，douyin+wechat 是 POST', () => {
+  assert.deepEqual(ENABLED_KEYS.sort(), ['bilibili', 'douyin', 'tiktok', 'wechat', 'xiaohongshu', 'youtube'])
+  const expected = {
+    xiaohongshu: ['GET', '/api/v1/xiaohongshu/app_v2/search_notes', '/api/v1/xiaohongshu/app_v2/get_note_comments'],
+    douyin: ['POST', '/api/v1/douyin/search/fetch_general_search_v1', '/api/v1/douyin/web/fetch_video_comments'],
+    tiktok: ['GET', '/api/v1/tiktok/web/fetch_general_search', '/api/v1/tiktok/web/fetch_post_comment'],
+    bilibili: ['GET', '/api/v1/bilibili/web/fetch_general_search', '/api/v1/bilibili/app/fetch_video_comments'],
+    wechat: ['POST', '/api/v1/wechat_search/v2/fetch_search_videos', '/api/v1/wechat_channels/v2/fetch_video_comments'],
+    youtube: ['GET', '/api/v1/youtube/web/search_video', '/api/v1/youtube/web/get_video_comments'],
+  }
+  for (const [key, [method, searchPath, commentsPath]] of Object.entries(expected)) {
+    assert.equal(PLATFORMS[key].search.method, method, `${key} 搜索方法`)
+    assert.equal(PLATFORMS[key].search.path, searchPath, `${key} 搜索端点`)
+    assert.equal(PLATFORMS[key].comments.path, commentsPath, `${key} 评论端点`)
+    assert.equal(typeof PLATFORMS[key].search.extract, 'function')
+    assert.equal(typeof PLATFORMS[key].mapNote, 'function')
+    assert.equal(typeof PLATFORMS[key].mapComment, 'function')
+  }
+  // 参考实现里 twitter / reddit 未启用
+  assert.equal(PLATFORMS.twitter.enabled, false)
+  assert.equal(PLATFORMS.reddit.enabled, false)
+  assert.deepEqual(PLATFORM_KEYS, Object.keys(PLATFORMS))
+})
+
+test('平台别名：小红书/tikhub/视频号 都能识别；未知平台报错列出可用', async () => {
+  assert.equal(platformOf('小红书'), 'xiaohongshu')
+  assert.equal(platformOf('xhs'), 'xiaohongshu')
+  assert.equal(platformOf('抖音'), 'douyin')
+  assert.equal(platformOf('tikhub'), 'douyin')
+  assert.equal(platformOf('B站'), 'bilibili')
+  assert.equal(platformOf('视频号'), 'wechat')
+  assert.equal(platformOf('火星'), null)
+  await assert.rejects(
+    () => searchPlatform({}, '火星', 'x', { fetchImpl: () => { throw new Error('不该发请求') } }),
+    /未知平台：火星/,
+  )
+})
+
+test('缺 token：不进网络、直接提示去面板「⚙️ 设置」', async () => {
+  let called = 0
+  const fetchImpl = () => { called++; return Promise.resolve({ ok: true, status: 200, json: async () => ({}) }) }
+  await assert.rejects(
+    () => searchPlatform({ tikhubToken: '' }, 'xiaohongshu', '猫咪', { fetchImpl }),
+    /TikHub token 未配置.*⚙️ 设置/,
+  )
+  assert.equal(called, 0, '没 token 时一个请求都不该发')
+})
+
+test('小红书搜索：按 data.data.items[].note 归一化，带 explore 链接', async () => {
+  const payload = {
+    code: 200,
+    data: {
+      data: {
+        items: [
+          {
+            note: {
+              id: 'abc123',
+              title: '猫咪自助理毛实测',
+              desc: '买了三个月，说说真实感受…',
+              liked_count: 1234,
+              collected_count: 88,
+              comments_count: 56,
+              user: { nickname: '猫奴A', userid: 'u1' },
+            },
+          },
+        ],
+      },
+    },
+  }
+  let seenUrl = ''
+  const fetchImpl = async (url, init) => {
+    seenUrl = `${init.method} ${url}`
+    return { ok: true, status: 200, json: async () => payload, headers: { get: () => null } }
+  }
+  const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'xiaohongshu', '猫咪 自助理毛', { fetchImpl })
+  assert.equal(out.count, 1)
+  assert.equal(out.items[0].id, 'abc123')
+  assert.equal(out.items[0].author, '猫奴A')
+  assert.equal(out.items[0].liked, 1234)
+  assert.equal(out.items[0].collected, 88)
+  assert.equal(out.items[0].comments, 56)
+  assert.match(out.items[0].url, /^https:\/\/www\.xiaohongshu\.com\/explore\/abc123$/)
+  assert.match(seenUrl, /^GET .*xiaohongshu\/app_v2\/search_notes\?keyword=/)
+})
+
+test('抖音搜索：走 POST + JSON body（参考实现就是 POST）', async () => {
+  let seen = null
+  const fetchImpl = async (url, init) => {
+    seen = { url, method: init.method, body: init.body && JSON.parse(init.body) }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        data: {
+          data: [
+            // 实测形状：卡片 { type, aweme_info: {...} }
+            {
+              type: 1,
+              aweme_info: {
+                aweme_id: '7300000000000000000',
+                desc: '健身 App 打卡三个月，坑真多',
+                author: { nickname: '阿强' },
+                statistics: { digg_count: 99, comment_count: 7 },
+              },
+            },
+          ],
+        },
+      }),
+      headers: { get: () => null },
+    }
+  }
+  const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'douyin', '健身 App 痛点', { fetchImpl })
+  assert.equal(seen.method, 'POST')
+  assert.match(seen.url, /douyin\/search\/fetch_general_search_v1$/)
+  assert.equal(seen.body.keyword, '健身 App 痛点')
+  assert.equal(seen.body.content_type, '1')
+  assert.equal(out.items[0].id, '7300000000000000000')
+  assert.equal(out.items[0].author, '阿强')
+  assert.equal(out.items[0].liked, 99)
+})
+
+test('B站搜索：按 data.data.result[] 归一化（带 bvid 链接）', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      code: 200,
+      data: { data: { result: [{ bvid: 'BV1xx411c7mD', title: 'B站长视频痛点合集', author: 'UP主A', play: 1000, review: 20, like: 300 }] } },
+    }),
+    headers: { get: () => null },
+  })
+  const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'bilibili', '痛点', { fetchImpl })
+  assert.equal(out.items[0].id, 'BV1xx411c7mD')
+  assert.equal(out.items[0].title, 'B站长视频痛点合集')
+  assert.equal(out.items[0].comments, 20)
+  assert.match(out.items[0].url, /bilibili\.com\/video\/BV1xx411c7mD/)
+})
+
+test('评论：小红书按 data.comments[] 归一化（正文/作者/点赞）', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      code: 200,
+      data: { comments: [{ id: 'c1', content: '这个我也踩过坑，毛根本推不动', user: { nickname: '用户B' }, like_count: 12 }] },
+    }),
+    headers: { get: () => null },
+  })
+  const out = await fetchComments({ tikhubToken: 'tok_test_long_enough' }, 'xiaohongshu', 'abc123', { fetchImpl })
+  assert.equal(out.count, 1)
+  assert.match(out.items[0].content, /踩过坑/)
+  assert.equal(out.items[0].author, '用户B')
+  assert.equal(out.items[0].liked, 12)
+})
+
+test('未启用渠道（twitter）：直接报错，不发请求', async () => {
+  let called = 0
+  await assert.rejects(
+    () => searchPlatform({ tikhubToken: 'tok' }, 'twitter', 'saas', { fetchImpl: () => { called++; return Promise.resolve({}) } }),
+    /未启用/,
+  )
+  assert.equal(called, 0)
+})
+
+test('401/403：提示重新粘贴 token，不重试', async () => {
+  let calls = 0
+  const fetchImpl = async () => { calls++; return { ok: false, status: 401, text: async () => 'unauthorized', headers: { get: () => null } } }
+  await assert.rejects(
+    () => searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'youtube', 'pain', { fetchImpl }),
+    /认证失败（401\/403）.*⚙️ 设置/,
+  )
+  assert.equal(calls, 1, '认证失败不该重试')
+})
+
+test('设置：存本机、掩码返回、清除生效', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'seekmoney-'))
+  process.env.DSH_HOME = dir
+  // 重新导入，让 settings 模块用新的 DSH_HOME
+  return import(`../lib/settings.js?cache=${Date.now()}`).then((m) => {
+    assert.equal(m.maskSettings().configured, false)
+    const masked = m.saveSettings({ tikhubToken: 'tk_abcdefghijklmnop' })
+    assert.equal(masked.configured, true)
+    assert.match(masked.tokenMasked, /^tk_a\*\*\*\*mnop$/)
+    assert.ok(!JSON.stringify(masked).includes('abcdefghij'), '掩码里不能出现中间明文')
+    assert.equal(m.resolveToken({}), 'tk_abcdefghijklmnop')
+    m.clearSettings()
+    assert.equal(m.getSettings().tikhubToken, '')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 文档一致性：技能/系统提示必须指向本插件自己的工具，不许再借别的插件的 key
+// ---------------------------------------------------------------------------
+test('技能 addendum：指向 seekmoney_search / seekmoney_comments 与「⚙️ 设置」', async () => {
   const provider = createSkillProvider([join(ROOT, 'skills')])
   const c = (await provider.list())[0]
   const skill = await provider.get(c)
-  assert.match(skill.content, /xhs_search/)
-  assert.match(skill.content, /xhs_comments/)
-  assert.match(skill.content, /web_search/)
-  assert.match(skill.content, /本插件自身不需要任何 API key/)
-  assert.ok(!/需要用户自己的 key/.test(skill.content), '不该再让用户自己给 key')
-  assert.ok(!/沙箱 Python（TikHub/.test(skill.content), '不该再让模型现写 Python 连 TikHub')
+  assert.match(skill.content, /seekmoney_search/)
+  assert.match(skill.content, /seekmoney_comments/)
+  assert.match(skill.content, /本插件自带 key/)
+  assert.match(skill.content, /⚙️ 设置/)
+  assert.ok(!/xhs_search/.test(skill.content), '不该再指向别的插件的工具')
+  assert.ok(!/需要用户自己的 key/.test(skill.content))
 })
 
-test('技能正文：阶段 1 取数规则含 xhs_search + 禁止索要 key', () => {
+test('技能正文：阶段 1 给出各平台 platform 参数与端点表', () => {
   const text = readFileSync(join(ROOT, 'skills', 'seekmoney-pain-finder', 'SKILL.md'), 'utf8')
-  assert.match(text, /xhs_search/)
-  assert.match(text, /web_search/)
-  assert.match(text, /不需要、也不应该向用户索要任何 API key/)
-  assert.match(text, /编造/)
+  for (const key of ['douyin', 'tiktok', 'bilibili', 'youtube', 'xiaohongshu', 'wechat']) {
+    assert.ok(text.includes(key), `缺平台 ${key}`)
+  }
+  assert.match(text, /全部走 TikHub/)
+  assert.match(text, /绝不向用户索要明文 key/)
+  assert.match(text, /禁止编造/)
 })
 
-test('systemPrompt：数据通道写清楚，且明确不需要 key', () => {
+test('systemPrompt：写明全部渠道走 TikHub + 本插件自带 key', () => {
   const section = systemSection()
-  assert.match(section.text, /数据通道（本插件不需要 API key）/)
-  assert.match(section.text, /xhs_search/)
-  assert.match(section.text, /web_search/)
-  assert.ok(!/需要用户自己的 key/.test(section.text))
+  assert.match(section.text, /全部走 TikHub，本插件自带 key/)
+  assert.match(section.text, /seekmoney_search/)
+  assert.match(section.text, /seekmoney_comments/)
+  assert.ok(!/xhs_search/.test(section.text))
 })
 
+
+
+test('微信视频号：拍平 subBoxes.items[] 并去掉 <em> 高亮标签', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      code: 200,
+      data: {
+        results: {
+          data: [
+            {
+              subBoxes: [
+                {
+                  items: [
+                    {
+                      exportId: 'export/abc',
+                      docID: 'doc1',
+                      title: '全球前十<em class="highlight">保温杯</em>品牌测评',
+                      source: '测评号',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }),
+    headers: { get: () => null },
+  })
+  const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'wechat', '保温杯', { fetchImpl })
+  assert.equal(out.count, 1)
+  assert.equal(out.items[0].id, 'export/abc')
+  assert.ok(!out.items[0].title.includes('<em'), '标题不该带 HTML 标签')
+  assert.match(out.items[0].title, /保温杯品牌测评/)
+})
+
+test('B站：标题里的 <em class="keyword"> 高亮标签会被清掉', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      code: 200,
+      data: { data: { result: [{ bvid: 'BV1aa', title: '<em class="keyword">租房</em>踩坑指南', author: 'UP', review: 5 }] } },
+    }),
+    headers: { get: () => null },
+  })
+  const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'bilibili', '租房', { fetchImpl })
+  assert.equal(out.items[0].title, '租房踩坑指南')
+})
