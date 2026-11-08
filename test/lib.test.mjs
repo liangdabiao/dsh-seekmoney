@@ -103,3 +103,55 @@ test('LICENSE 为 MIT（liangdabiao）', () => {
   assert.match(text, /MIT/)
   assert.match(text, /liangdabiao/)
 })
+
+// ---------------------------------------------------------------------------
+// 回归：分数入参缺失/非数字时不能静默算成 NaN 并给出 level: 'Low'
+// ---------------------------------------------------------------------------
+test('scoreCluster：非数字直接抛错，不产出 NaN', () => {
+  assert.throws(
+    () => scoreCluster({ clusterSize: 10, totalDataSize: 100, emotionalIntensity: undefined, llmMarketScore: 3, existingSolutions: [] }),
+    /emotionalIntensity 必须是数字/,
+  )
+  assert.throws(
+    () => scoreCluster({ clusterSize: 10, totalDataSize: 100, emotionalIntensity: 3, llmMarketScore: NaN, existingSolutions: [] }),
+    /llmMarketScore 必须是数字/,
+  )
+  assert.throws(
+    () => scoreCluster({ clusterSize: 500, totalDataSize: 100, emotionalIntensity: 3, llmMarketScore: 3, existingSolutions: [] }),
+    /不能大于 totalDataSize/,
+  )
+})
+
+test('seekmoney_score 工具：坏入参给可读错误，不出 NaN / 不假装 Low', async () => {
+  const tool = TOOLS.find((t) => t.name === 'seekmoney_score')
+  const base = { cluster_size: 30, total_data_size: 200, existing_solutions: '[]' }
+  const cases = [
+    ['缺 emotional_intensity', { ...base, llm_market_score: 3 }, /emotional_intensity 必须是 0~5 的数字/],
+    ['emotional_intensity 传字符串', { ...base, emotional_intensity: 'high', llm_market_score: 3 }, /emotional_intensity 必须是 0~5 的数字/],
+    ['缺 llm_market_score', { ...base, emotional_intensity: 3 }, /llm_market_score 必须是 0~5 的数字/],
+    ['情绪超范围', { ...base, emotional_intensity: 9, llm_market_score: 3 }, /emotional_intensity 超出 0~5/],
+    ['市场超范围', { ...base, emotional_intensity: 3, llm_market_score: -1 }, /llm_market_score 超出 0~5/],
+    ['聚类条数大于总量', { ...base, cluster_size: 500, emotional_intensity: 3, llm_market_score: 3 }, /不能大于 total_data_size/],
+  ]
+  for (const [label, args, expect] of cases) {
+    const out = await tool.execute(args)
+    assert.equal(out.ok, false, `${label}：应返回 ok:false`)
+    assert.match(out.summary, expect, `${label}：错误信息不对`)
+    // 关键是别再出现「综合 NaN/5（Low）」这种假结论（回显收到的值是有意的，不算）
+    assert.ok(!/NaN/.test(out.summary), `${label}：不该出现 NaN —— ${out.summary}`)
+    assert.ok(!/（Low）|（Medium）|（High）/.test(out.summary), `${label}：拒绝时不该给等级结论 —— ${out.summary}`)
+  }
+})
+
+test('seekmoney_score 工具：正常入参给出确定结论', async () => {
+  const tool = TOOLS.find((t) => t.name === 'seekmoney_score')
+  const out = await tool.execute({
+    cluster_size: 30, total_data_size: 200, emotional_intensity: 3, llm_market_score: 3, existing_solutions: '[]',
+  })
+  assert.equal(out.ok, true)
+  assert.match(out.summary, /综合 3\.5\/5（Medium）/)
+  const data = JSON.parse(out.data)
+  assert.equal(data.overall, 3.5)
+  assert.equal(data.level, 'Medium')
+  assert.equal(data.data_quality.level, 'reliable')
+})

@@ -7,6 +7,12 @@ const { useState } = require('react')
 
 const PANEL_ID = 'seekmoney'
 
+// 「马上使用」：开新对话并把调研指令填进输入框（不直接发送，用户补上主题再回车）。
+// 走 Host 的 uiWorkspace.startSession（与「运营 Agent」「卖家工具箱」「小红书验证」「评论 VOC」「电商视觉」同一套入口）：
+//   startSession(sessionId?, { prompt, whenDraftExists: 'keep'|'replace'|'append' })
+const USE_PROMPT = '使用‘痛点发现’插件 进行商机调研：'
+let openInChat = null
+
 function PanelIcon(props) {
   return h('svg', { width: 24, height: 24, viewBox: '0 0 24 24', fill: 'none', ...props },
     h('rect', { x: 2.5, y: 2.5, width: 19, height: 19, rx: 5, fill: '#0e7490' }),
@@ -26,7 +32,14 @@ const STAGES = [
 const PLATFORMS = ['抖音', '小红书', 'TikTok', 'B站', 'YouTube', 'X (Twitter)', 'Reddit', '微信视频号']
 
 function GuideTab() {
+  const use = () => { if (openInChat) openInChat(USE_PROMPT) }
   return h('div', null,
+    h('div', { style: styles.ctaCard },
+      h('div', { style: styles.ctaText },
+        h('div', { style: styles.ctaTitle }, '想找一个值得做的商机？'),
+        h('div', { style: styles.ctaMuted },
+          '点「马上使用」→ 开新对话，输入框已填好指令；补上要调研的方向（如：健身 App 用户的痛点）后回车即可。')),
+      h('button', { style: styles.ctaButton, onClick: use, title: `填进对话：${USE_PROMPT}` }, '🚀 马上使用')),
     h('div', { style: styles.card },
       h('div', { style: styles.sectionTitle }, '怎么找痛点'),
       h('div', { style: styles.stepList },
@@ -64,6 +77,11 @@ function Panel() {
 const styles = {
   wrap: { padding: 16, overflow: 'auto', height: '100%', boxSizing: 'border-box', fontFamily: '-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif', fontSize: 13, color: '#1a1a1a' },
   row: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 },
+  ctaCard: { display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', background: '#eff9fb', border: '1px solid #cfe9ef', borderRadius: 10, padding: '12px 14px', marginBottom: 12 },
+  ctaText: { flex: 1, minWidth: 200 },
+  ctaTitle: { fontWeight: 700, color: '#075263', marginBottom: 4 },
+  ctaMuted: { color: '#7d8b8f', lineHeight: 1.7 },
+  ctaButton: { padding: '10px 20px', border: 'none', borderRadius: 10, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700, boxShadow: '0 2px 6px rgba(14,116,144,.25)' },
   button: { padding: '6px 14px', border: 'none', borderRadius: 8, background: '#0e7490', color: '#fff', cursor: 'pointer', fontSize: 13 },
   tabActive: { padding: '8px 16px', border: '1px solid #0e7490', borderRadius: 8, background: '#e0f2f5', color: '#075263', fontWeight: 600, fontSize: 13 },
   card: { background: '#fff', border: '1px solid #e3e3e6', borderRadius: 10, padding: 12, marginBottom: 10 },
@@ -78,6 +96,15 @@ const styles = {
 }
 
 function apply(ctx) {
+  // 一键入口：开新对话并预填「使用‘痛点发现’插件 进行商机调研：」（不直接发送）
+  openInChat = (prompt) => {
+    try {
+      ctx.uiWorkspace.startSession(undefined, { prompt, whenDraftExists: 'replace' })
+    } catch (err) {
+      console.error('[seekmoney] 开新对话失败', err)
+      alert('开新对话失败：' + ((err && err.message) || err))
+    }
+  }
   ctx.slots.inject('sidebar.panellist', () =>
     ctx.slots.register({ name: 'sidebar.panellist', id: PANEL_ID, order: 20, label: () => '痛点发现' }, PanelIcon))
   ctx.slots.inject('main', () =>
@@ -85,5 +112,7 @@ function apply(ctx) {
 }
 
 exports.isPlugin = true
-exports.inject = ['slots']
+exports.inject = ['slots', 'uiWorkspace']
 exports.apply = apply
+
+

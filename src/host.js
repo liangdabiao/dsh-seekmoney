@@ -59,14 +59,35 @@ export const seekmoneyScoreTool = {
     if (!Array.isArray(solutions)) return result(false, 'existing_solutions 必须是数组')
     if (!Number.isFinite(args.cluster_size) || args.cluster_size <= 0) return result(false, 'cluster_size 必须是正数')
     if (!Number.isFinite(args.total_data_size) || args.total_data_size <= 0) return result(false, 'total_data_size 必须是正数')
+    // 这两个分项之前没校验：传 undefined/字符串会算出 NaN，再被判成 level: 'Low'（假结论）。
+    if (!Number.isFinite(args.emotional_intensity)) {
+      return result(false, `emotional_intensity 必须是 0~5 的数字（收到 ${JSON.stringify(args.emotional_intensity)}）。按第 ③ 步的情感强度填，例如 3.5；不确定就填 3。`)
+    }
+    if (!Number.isFinite(args.llm_market_score)) {
+      return result(false, `llm_market_score 必须是 0~5 的数字（收到 ${JSON.stringify(args.llm_market_score)}）。按 ③ 步对市场潜力的判断填，例如 3；不确定就填 3。`)
+    }
+    if (args.emotional_intensity < 0 || args.emotional_intensity > 5) {
+      return result(false, `emotional_intensity 超出 0~5（收到 ${args.emotional_intensity}）。`)
+    }
+    if (args.llm_market_score < 0 || args.llm_market_score > 5) {
+      return result(false, `llm_market_score 超出 0~5（收到 ${args.llm_market_score}）。`)
+    }
+    if (args.cluster_size > args.total_data_size) {
+      return result(false, `cluster_size（${args.cluster_size}）不能大于 total_data_size（${args.total_data_size}）——聚类内容条数不可能超过采集总量，请检查两个数字。`)
+    }
 
-    const score = scoreCluster({
-      clusterSize: args.cluster_size,
-      totalDataSize: args.total_data_size,
-      emotionalIntensity: args.emotional_intensity,
-      llmMarketScore: args.llm_market_score,
-      existingSolutions: solutions,
-    })
+    let score
+    try {
+      score = scoreCluster({
+        clusterSize: args.cluster_size,
+        totalDataSize: args.total_data_size,
+        emotionalIntensity: args.emotional_intensity,
+        llmMarketScore: args.llm_market_score,
+        existingSolutions: solutions,
+      })
+    } catch (err) {
+      return result(false, `评分失败：${err.message}`)
+    }
     const quality = dataQuality(args.total_data_size)
 
     return result(

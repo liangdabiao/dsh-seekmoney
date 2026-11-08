@@ -34,7 +34,7 @@ DeepSeek Harness（dsh）插件：**从社交媒体找商机，发现用户核�
 npm install && npm test && npm run selftest && npm run build
 ```
 
-- `npm test`：11 个单测（需求强度/市场规模阶梯/竞争度连续函数/无效方案过滤/40-30-30 加权/蓝海红海端到端/数据分级/工具 schema/技能铁律/systemPrompt/许可）
+- `npm test`：14 个单测（需求强度/市场规模阶梯/竞争度连续函数/无效方案过滤/40-30-30 加权/蓝海红海端到端/数据分级/工具 schema/技能铁律/systemPrompt/许可 + 3 个回归：非数字入参不再算成 NaN 并假装 Low、工具层坏入参给可读错误、正常入参给出确定结论）
 - `npm run selftest`：评分端到端（蓝海 High/红海 Low）+ 数据分级 + 技能 + 泄露 key 扫描 + 面板 API
 - `npm run build`：打包 dist/client.js + 三大自检（含 treeShaking:false）
 
@@ -42,8 +42,26 @@ npm install && npm test && npm run selftest && npm run build
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-seekmoney
+# 从 GitHub 装（dist/client.js 已入库，装完即有面板）
+dsh plugin --profile web add github:liangdabiao/dsh-seekmoney
+
+# 钉版本
+dsh plugin --profile web add github:liangdabiao/dsh-seekmoney#v0.1.1
 ```
+
+> ⚠️ 本包**没有发布到 npm**，`dsh plugin add dsh-seekmoney` 会失败——请用上面的 `github:` 形式。
+>
+> `dist/client.js` 是入库文件：dsh 宿主直接消费已构建的客户端 bundle（`package.json` → `exports["./client"]`），缺它会导致插件激活失败、侧栏「痛点发现」面板不出现。改完源码记得 `npm run build` 再提交。
+
+## 一键开始
+
+面板顶部有 **🚀 马上使用** 按钮：点了会开一个新对话，输入框里已经填好
+
+```
+使用‘痛点发现’插件 进行商机调研：
+```
+
+补上要调研的方向（如：健身 App 用户的痛点）后回车即可。
 
 ## 许可
 
