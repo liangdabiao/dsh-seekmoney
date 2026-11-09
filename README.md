@@ -86,3 +86,4 @@ X (Twitter) / Reddit 的端点参考实现里同样未启用，本插件也不�
 没配 key 时工具会直接提示去「⚙️ 设置」，**不会向用户索要明文 token**。
 
 工具： + "seekmoney_search(platform, keyword)" + @ 搜内容 →  + "seekmoney_comments(platform, item_id)" + @ 拉评论 →  + "seekmoney_score" + @ 打分。TikHub 全失败时才退  + "web_search" + @/ + "web_fetch" + @，仍拿不到就请用户粘贴并把缺口标 N/A。
+

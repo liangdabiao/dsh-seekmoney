@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { execFileSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -171,20 +172,29 @@ test('渠道表：6 个启用渠道，端点/方法与参考实现一致，douyi
   assert.deepEqual(ENABLED_KEYS.sort(), ['bilibili', 'douyin', 'tiktok', 'wechat', 'xiaohongshu', 'youtube'])
   const expected = {
     xiaohongshu: ['GET', '/api/v1/xiaohongshu/app_v2/search_notes', '/api/v1/xiaohongshu/app_v2/get_note_comments'],
-    douyin: ['POST', '/api/v1/douyin/search/fetch_general_search_v1', '/api/v1/douyin/web/fetch_video_comments'],
+    douyin: ['POST', '/api/v1/douyin/search/fetch_general_search_v1', '/api/v1/douyin/app/v3/fetch_video_comments'],
     tiktok: ['GET', '/api/v1/tiktok/web/fetch_general_search', '/api/v1/tiktok/web/fetch_post_comment'],
     bilibili: ['GET', '/api/v1/bilibili/web/fetch_general_search', '/api/v1/bilibili/app/fetch_video_comments'],
-    wechat: ['POST', '/api/v1/wechat_search/v2/fetch_search_videos', '/api/v1/wechat_channels/v2/fetch_video_comments'],
-    youtube: ['GET', '/api/v1/youtube/web/search_video', '/api/v1/youtube/web/get_video_comments'],
+    youtube: ['GET', '/api/v1/youtube/web/search_video', null],
   }
   for (const [key, [method, searchPath, commentsPath]] of Object.entries(expected)) {
     assert.equal(PLATFORMS[key].search.method, method, `${key} 搜索方法`)
     assert.equal(PLATFORMS[key].search.path, searchPath, `${key} 搜索端点`)
-    assert.equal(PLATFORMS[key].comments.path, commentsPath, `${key} 评论端点`)
     assert.equal(typeof PLATFORMS[key].search.extract, 'function')
     assert.equal(typeof PLATFORMS[key].mapNote, 'function')
-    assert.equal(typeof PLATFORMS[key].mapComment, 'function')
+    if (commentsPath === null) {
+      // 实测接不通的渠道（youtube 二次 continuation / wechat 拿不到数字 id）如实标注不支持
+      assert.equal(PLATFORMS[key].comments, null, `${key} 不该声明评论端点`)
+    } else {
+      assert.equal(PLATFORMS[key].comments.path, commentsPath, `${key} 评论端点`)
+      assert.equal(typeof PLATFORMS[key].mapComment, 'function')
+    }
   }
+  // 微信视频号：搜索走 POST；评论端点实测拿不到（搜索只给 exportId/docID），如实不接入
+  assert.equal(PLATFORMS.wechat.search.method, 'POST')
+  assert.equal(PLATFORMS.wechat.search.path, '/api/v1/wechat_search/v2/fetch_search_videos')
+  assert.equal(PLATFORMS.wechat.comments, null)
+  assert.equal(PLATFORMS.youtube.comments, null)
   // 参考实现里 twitter / reddit 未启用
   assert.equal(PLATFORMS.twitter.enabled, false)
   assert.equal(PLATFORMS.reddit.enabled, false)
@@ -206,13 +216,24 @@ test('平台别名：小红书/tikhub/视频号 都能识别；未知平台报�
 })
 
 test('缺 token：不进网络、直接提示去面板「⚙️ 设置」', async () => {
-  let called = 0
-  const fetchImpl = () => { called++; return Promise.resolve({ ok: true, status: 200, json: async () => ({}) }) }
-  await assert.rejects(
-    () => searchPlatform({ tikhubToken: '' }, 'xiaohongshu', '猫咪', { fetchImpl }),
-    /TikHub token 未配置.*⚙️ 设置/,
-  )
-  assert.equal(called, 0, '没 token 时一个请求都不该发')
+  // 本机 settings.json 里可能已经存了真 token，所以用子进程 + 空 DSH_HOME 隔离，
+  // 才能测到「完全没配置」这条路径。
+  const script = `
+    import('${new URL('../lib/tikhub.js', import.meta.url).href}').then(async (m) => {
+      let called = 0
+      try {
+        await m.searchPlatform({ tikhubToken: '' }, 'xiaohongshu', 'x', { fetchImpl: () => { called++; throw new Error('不该发请求') } })
+        console.log('NO_ERROR called=' + called)
+      } catch (e) {
+        console.log('ERR:' + e.message + ' called=' + called)
+      }
+    })`
+  const out = execFileSync(process.execPath, ['-e', script], {
+    env: { ...process.env, DSH_HOME: mkdtempSync(join(tmpdir(), 'seekmoney-notoken-')), TIKHUB_TOKEN: '' },
+    encoding: 'utf8',
+  })
+  assert.match(out, /TikHub token 未配置.*⚙️ 设置/, out)
+  assert.match(out, /called=0/, '没 token 时一个请求都不该发')
 })
 
 test('小红书搜索：按 data.data.items[].note 归一化，带 explore 链接', async () => {
@@ -442,3 +463,5 @@ test('B站：标题里的 <em class="keyword"> 高亮标签会被清掉', async 
   const out = await searchPlatform({ tikhubToken: 'tok_test_long_enough' }, 'bilibili', '租房', { fetchImpl })
   assert.equal(out.items[0].title, '租房踩坑指南')
 })
+
+

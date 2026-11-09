@@ -81,7 +81,7 @@ export const seekmoneySearchTool = {
       }
       const lines = out.items.map(
         (n, i) =>
-          `${i + 1}. [liked ${n.liked}${n.collected ? ` · collected ${n.collected}` : ''} · comments ${n.comments}] ` +
+          `${i + 1}. [liked ${n.liked}${n.views ? ` · views ${n.views}` : ''}${n.collected ? ` · collected ${n.collected}` : ''} · comments ${n.comments}] ` +
           `${n.title || n.description || '(无标题)'}${n.author ? ` —— @${n.author}` : ''}` +
           `${n.id ? `\n   id: ${n.id}` : ''}${n.url ? `\n   ${n.url}` : ''}`,
       )
@@ -99,7 +99,7 @@ export const seekmoneySearchTool = {
 export const seekmoneyCommentsTool = {
   name: 'seekmoney_comments',
   description:
-    '拉某条内容的评论（TikHub，本插件自带 token）：小红书 / 抖音 / TikTok / B站 / YouTube / 微信视频号。评论是痛点的金矿——' +
+    '拉某条内容的评论（TikHub，本插件自带 token）：小红书 / 抖音 / TikTok / B站（实测可用）。评论是痛点的金矿——' +
     '先用 seekmoney_search 拿到 id，再用它取评论原话（正文 + 作者 + 点赞 + IP 属地）。',
   parameters: {
     type: 'object', additionalProperties: false, required: ['platform', 'item_id'],
@@ -228,3 +228,5 @@ export const TOOLS = [seekmoneySearchTool, seekmoneyCommentsTool, seekmoneyScore
 export function tokenConfigured(config = configRef.config) {
   return Boolean(resolveToken(config))
 }
+
+

@@ -15,12 +15,12 @@ description: 用户痛点发现与商机验证方法论。当用户要求「找�
 
 | 平台 | platform 参数 | 搜索（seekmoney_search） | 评论（seekmoney_comments） |
 |---|---|---|---|
-| 抖音 | `douyin` | POST `douyin/search/fetch_general_search_v1` | GET `douyin/web/fetch_video_comments` |
-| TikTok | `tiktok` | GET `tiktok/web/fetch_general_search` | GET `tiktok/web/fetch_post_comment` |
-| B站 | `bilibili` | GET `bilibili/web/fetch_general_search` | GET `bilibili/app/fetch_video_comments` |
-| YouTube | `youtube` | GET `youtube/web/search_video` | GET `youtube/web/get_video_comments` |
-| 小红书 | `xiaohongshu` | GET `xiaohongshu/app_v2/search_notes` | GET `xiaohongshu/app_v2/get_note_comments` |
-| 微信视频号 | `wechat` | POST `wechat_search/v2/fetch_search_videos` | GET `wechat_channels/v2/fetch_video_comments` |
+| 抖音 | `douyin` | POST `douyin/search/fetch_general_search_v1` | ✅ GET `douyin/app/v3/fetch_video_comments` |
+| B站 | `bilibili` | GET `bilibili/web/fetch_general_search` | ✅ GET `bilibili/app/fetch_video_comments` |
+| 小红书 | `xiaohongshu` | GET `xiaohongshu/app_v2/search_notes` | ✅ GET `xiaohongshu/app_v2/get_note_comments` |
+| TikTok | `tiktok` | GET `tiktok/web/fetch_general_search`（实测 400，要 search_id） | 未验证 |
+| YouTube | `youtube` | GET `youtube/web/search_video` | ❌ 需二次 continuation，未接入 |
+| 微信视频号 | `wechat` | POST `wechat_search/v2/fetch_search_videos` | ❌ 拿不到数字 video id，未接入 |
 | X (Twitter) | `twitter` | 端点存在但参考实现未启用 | — |
 | Reddit | `reddit` | 端点存在但参考实现未启用 | — |
 
@@ -90,4 +90,5 @@ description: 用户痛点发现与商机验证方法论。当用户要求「找�
 3. **数据缺口写 N/A**——不编造笔记/评论数据。
 4. **现有方案要过滤无效项**——"待调研"/"解析失败"不算竞品。
 5. **不构成商业决策依据**——报告附免责声明。
+
 
