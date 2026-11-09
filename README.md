@@ -1,8 +1,11 @@
 # dsh-seekmoney · 用户痛点发现器
 
-DeepSeek Harness（dsh）插件：**从社交媒体找商机，发现用户核心痛点**——5 阶段流程（多平台采集 → 语义聚类 → 深度分析 → 优先级评分 → MVP 计划）+ 确定性优先级评分系统（需求 40% + 市场 30% + 竞争 30%）。纯确定性评分零 API key。
+DeepSeek Harness（dsh）插件：**从社交媒体找商机，发现用户核心痛点**——5 阶段流程（多平台采集 → 语义聚类 → 深度分析 → 优先级评分 → MVP 计划）+ 确定性优先级评分系统（需求 40% + 市场 30% + 竞争 30%）。需要配置 tikhub.io API key。
 
 方法论来自 [SeekMoney-ai](https://github.com/liangdabiao/SeekMoney-ai)（MIT，liangdabiao）。
+
+<img width="1743" height="1329" alt="image" src="https://github.com/user-attachments/assets/166cfd97-d660-485a-a676-2603635ee234" />
+
 
 ## 装上以后有什么
 
